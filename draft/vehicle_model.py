@@ -129,7 +129,7 @@ def speed_control_wrapper(env, sim_time):
     sim_time = int(sim_time)
     #spawn_point = carla.Transform(carla.Location(x=6.078289, y=-160, z=1.843106), carla.Rotation(pitch=0.000000, yaw=88.876099, roll=0.000000))
     
-    spawn_point = carla.Transform(carla.Location(x=387.10, y=330.08, z=8.34), carla.Rotation(pitch=0.000000, yaw=180, roll=0.000000))
+    spawn_point = carla.Transform(carla.Location(x=-277.08, y=-15.39, z=4.94), carla.Rotation(pitch=0.000000, yaw= 0, roll=0.000000))#carla.Transform(carla.Location(x=387.10, y=330.08, z=8.34), carla.Rotation(pitch=0.000000, yaw=180, roll=0.000000))
     model_name = "vehicle.tesla.model3"
     model_unique_name = env.spawn_vehicle(model_name,spawn_point)
     end_t = sim_time / env.delta_seconds
@@ -173,9 +173,13 @@ def speed_control_wrapper(env, sim_time):
             reference_speed.append(25)
             ref_speeds.append(25)
             curr_speeds.append(curr_speed)
-        if count >= 350:
-            reference_speed.append(15)
-            ref_speeds.append(15)
+        if count >= 350 and count <= 600:
+            reference_speed.append(10)
+            ref_speeds.append(10)
+            curr_speeds.append(curr_speed)
+        if count > 600:
+            reference_speed.append(18)
+            ref_speeds.append(18)
             curr_speeds.append(curr_speed)
         throttle, init_values = speed_control(env, sys, ref_speeds, curr_speeds, init_values)
         throttle = np.clip(throttle,0,1)
@@ -194,6 +198,8 @@ client = carla.Client("localhost",2000)
 client.set_timeout(2.0)
 #world = client.load_world('Town01')
 world = client.get_world()
+spectator = world.get_spectator()
+spectator.set_transform(carla.Transform(carla.Location(x=-68.29, y=151.75, z=170.8), carla.Rotation(pitch=-31.07, yaw= -90.868, roll=1.595)))
 '''
 weather = carla.WeatherParameters(
     cloudiness=10.0,
@@ -202,7 +208,7 @@ weather = carla.WeatherParameters(
 world.set_weather(weather)
 '''
 env = CARLA_ENV(world)
-time.sleep(20)
+time.sleep(2)
 try:
     '''
     throttle_signal , forward_speed = get_frequency_response_data(env,10,10)
@@ -211,7 +217,7 @@ try:
     plt.subplot(2,1,2)
     plt.plot(forward_speed)
     '''
-    throttles, speed, reference_speed = speed_control_wrapper(env, 13)
+    throttles, speed, reference_speed = speed_control_wrapper(env, 20)
     
     fig,a =  plt.subplots(3,1)
     

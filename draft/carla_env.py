@@ -27,20 +27,7 @@ import numpy as np
 from collections import deque
 
 
-class CARLA_ENV():
-    def __init__(self,client):
-        #self.client = carla.Client('localhost', 2000)
-        #self.client.set_timeout(10.0)
-        self.client = client
-        self.world = self.client.get_world()
-        self.blueprint_library = self.world.get_blueprint_library()
-        self.vehicle_dict = {}
-        self.walker_dict = {}
-        self.sensor_dict = {}
-        self.config_env()
-        
-        
-    def config_env(self, synchrony = True, delta_seconds = 0.02):
+def config_world(world, synchrony = True, delta_seconds = 0.02):
         '''
         Effects
         -------
@@ -56,9 +43,37 @@ class CARLA_ENV():
 
         Returns
         -------
-        None.
-
+        synchrony, delta_seconds
         '''
+        
+        
+        settings = world.get_settings()
+        settings.synchronous_mode = synchrony
+        settings.fixed_delta_seconds = delta_seconds
+        world.apply_settings(settings)
+        return synchrony, delta_seconds
+        
+class CARLA_ENV():
+    def __init__(self, world):
+        
+        #self.client = carla.Client('localhost', 2000)
+        #self.client.set_timeout(10.0)
+        #self.client = client
+        #self.world = self.client.get_world()
+        self.world = world
+        self.blueprint_library = self.world.get_blueprint_library()
+        #self.blueprint_library = blueprint_library
+        
+        self.vehicle_dict = {}
+        self.walker_dict = {}
+        self.sensor_dict = {}
+        self.config_env()
+        #self.synchrony = synchrony
+        #self.delta_seconds = delta_seconds
+        
+    def config_env(self, synchrony = False, delta_seconds = 0.02):
+
+        
         self.synchrony = synchrony
         self.delta_seconds = delta_seconds
         settings = self.world.get_settings()
@@ -157,9 +172,29 @@ class CARLA_ENV():
 
 client = carla.Client("localhost",2000)
 client.set_timeout(2.0)
-env = CARLA_ENV(client)
+world = client.load_world('Town06')
+weather = carla.WeatherParameters(
+    cloudiness=10.0,
+    precipitation=0.0,
+    sun_altitude_angle=90.0)
+world.set_weather(weather)
+'''
+settings = world.get_settings()
+#settings.synchronous_mode = True
+settings.fixed_delta_seconds = 0.02
+world.apply_settings(settings)
+
+settings = world.get_settings()
+settings.synchronous_mode = True
+world.apply_settings(settings)
+
+#synchrony, delta_seconds = config_world(world)
+blueprint_library = world.get_blueprint_library()
+'''
+env = CARLA_ENV(world)
 
 try:
-    env.spawn_vehicle()
+    name = env.spawn_vehicle()
+    print(name)
 finally:
     env.destroy_actors()
