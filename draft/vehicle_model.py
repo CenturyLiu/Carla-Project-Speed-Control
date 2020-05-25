@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from collections import deque
 from carla_env import CARLA_ENV
+import time
 
 
 def generate_throttle_signal(frequency,sampling_period, sim_time):
@@ -126,8 +127,10 @@ def speed_control(env, sys, ref_speeds, curr_speeds, init_values):
     
 def speed_control_wrapper(env, sim_time):
     sim_time = int(sim_time)
-    spawn_point = carla.Transform(carla.Location(x=6.078289, y=-160, z=1.843106), carla.Rotation(pitch=0.000000, yaw=88.876099, roll=0.000000))
-    model_name = "model3"
+    #spawn_point = carla.Transform(carla.Location(x=6.078289, y=-160, z=1.843106), carla.Rotation(pitch=0.000000, yaw=88.876099, roll=0.000000))
+    
+    spawn_point = carla.Transform(carla.Location(x=387.10, y=330.08, z=8.34), carla.Rotation(pitch=0.000000, yaw=180, roll=0.000000))
+    model_name = "vehicle.tesla.model3"
     model_unique_name = env.spawn_vehicle(model_name,spawn_point)
     end_t = sim_time / env.delta_seconds
     
@@ -153,7 +156,7 @@ def speed_control_wrapper(env, sim_time):
     ref_speeds.append(0)
     curr_speeds.append(0)
     
-    
+    #env.config_env(synchrony = True)
     
     while True:
         env.world.tick()
@@ -166,9 +169,13 @@ def speed_control_wrapper(env, sim_time):
             reference_speed.append(0)
             ref_speeds.append(0)
             curr_speeds.append(curr_speed)
-        if count > 50:
-            reference_speed.append(10)
-            ref_speeds.append(10)
+        if count > 50 and count < 350:
+            reference_speed.append(25)
+            ref_speeds.append(25)
+            curr_speeds.append(curr_speed)
+        if count >= 350:
+            reference_speed.append(15)
+            ref_speeds.append(15)
             curr_speeds.append(curr_speed)
         throttle, init_values = speed_control(env, sys, ref_speeds, curr_speeds, init_values)
         throttle = np.clip(throttle,0,1)
@@ -182,10 +189,20 @@ def speed_control_wrapper(env, sim_time):
 
 throttle_signal = [] 
 forward_speed = []
-client = carla.Client("localhost",2000)
 
+client = carla.Client("localhost",2000)
 client.set_timeout(2.0)
-env = CARLA_ENV(client)
+#world = client.load_world('Town01')
+world = client.get_world()
+'''
+weather = carla.WeatherParameters(
+    cloudiness=10.0,
+    precipitation=0.0,
+    sun_altitude_angle=90.0)
+world.set_weather(weather)
+'''
+env = CARLA_ENV(world)
+time.sleep(20)
 try:
     '''
     throttle_signal , forward_speed = get_frequency_response_data(env,10,10)
@@ -194,13 +211,19 @@ try:
     plt.subplot(2,1,2)
     plt.plot(forward_speed)
     '''
-    throttles, speed, reference_speed = speed_control_wrapper(env, 15)
-    plt.subplot(3,1,1)
-    plt.plot(reference_speed)
-    plt.subplot(3,1,2)
-    plt.plot(throttles)
-    plt.subplot(3,1,3)
-    plt.plot(speed)
+    throttles, speed, reference_speed = speed_control_wrapper(env, 13)
+    
+    fig,a =  plt.subplots(3,1)
+    
+    #plt.subplot(3,1,1)
+    a[0].plot(reference_speed)
+    a[0].set_title('reference speed')
+    #plt.subplot(3,1,2)
+    a[1].plot(throttles)
+    a[1].set_title('throttle applied')
+    a[2].plot(speed)
+    a[2].set_title('measured speed')
+    
     
 finally:
     env.destroy_actors()
