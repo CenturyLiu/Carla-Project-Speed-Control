@@ -129,13 +129,14 @@ def speed_control_wrapper(env, sim_time):
     sim_time = int(sim_time)
     #spawn_point = carla.Transform(carla.Location(x=6.078289, y=-160, z=1.843106), carla.Rotation(pitch=0.000000, yaw=88.876099, roll=0.000000))
     
-    spawn_point = carla.Transform(carla.Location(x=-277.08, y=-15.39, z=4.94), carla.Rotation(pitch=0.000000, yaw= 0, roll=0.000000))#carla.Transform(carla.Location(x=387.10, y=330.08, z=8.34), carla.Rotation(pitch=0.000000, yaw=180, roll=0.000000))
+    #spawn_point = carla.Transform(carla.Location(x= 79, y=-4.89, z=4.93), carla.Rotation(pitch=-5.5, yaw= -87, roll=0.00))#carla.Transform(carla.Location(x=-277.08, y=-15.39, z=4.94), carla.Rotation(pitch=0.000000, yaw= 0, roll=0.000000))#carla.Transform(carla.Location(x=387.10, y=330.08, z=8.34), carla.Rotation(pitch=0.000000, yaw=180, roll=0.000000))
+    spawn_point = carla.Transform(carla.Location(x=-277.08, y=-15.39, z=4.94), carla.Rotation(pitch=0.000000, yaw= 0, roll=0.000000))
     model_name = "vehicle.tesla.model3"
     model_unique_name = env.spawn_vehicle(model_name,spawn_point)
     end_t = sim_time / env.delta_seconds
     
-    KI = 0.05
-    KP = 1.0
+    KI = 0.01
+    KP = 0.5
     num_pi = [KP, KI]
     den_pi = [1.0, 0.01*KI/KP]
 
@@ -170,22 +171,27 @@ def speed_control_wrapper(env, sim_time):
             ref_speeds.append(0)
             curr_speeds.append(curr_speed)
         if count > 50 and count < 350:
-            reference_speed.append(25)
-            ref_speeds.append(25)
+            reference_speed.append(20)
+            ref_speeds.append(20)
             curr_speeds.append(curr_speed)
         if count >= 350 and count <= 600:
             reference_speed.append(10)
             ref_speeds.append(10)
             curr_speeds.append(curr_speed)
         if count > 600:
-            reference_speed.append(18)
-            ref_speeds.append(18)
+            reference_speed.append(0)
+            ref_speeds.append(0)
             curr_speeds.append(curr_speed)
         throttle, init_values = speed_control(env, sys, ref_speeds, curr_speeds, init_values)
         throttle = np.clip(throttle,0,1)
         throttles.append(throttle)
         
-        vehicle_control = carla.VehicleControl(throttle = throttle,steer=0.0)
+        #vehicle_control = carla.VehicleControl(throttle = throttle,steer=0.0)
+        if curr_speed <= reference_speed[-1]:
+            vehicle_control = carla.VehicleControl(throttle = throttle,steer=0.0)
+        else:
+            vehicle_control = carla.VehicleControl(throttle = throttle, steer = 0.0, brake = 0.5)
+        
         env.apply_vehicle_control(model_unique_name, vehicle_control)
         count += 1
     
@@ -195,11 +201,13 @@ throttle_signal = []
 forward_speed = []
 
 client = carla.Client("localhost",2000)
-client.set_timeout(2.0)
-#world = client.load_world('Town01')
-world = client.get_world()
+client.set_timeout(10.0)
+world = client.load_world('Town06')
+time.sleep(5)
+#world = client.get_world()
 spectator = world.get_spectator()
-spectator.set_transform(carla.Transform(carla.Location(x=-68.29, y=151.75, z=170.8), carla.Rotation(pitch=-31.07, yaw= -90.868, roll=1.595)))
+spectator.set_transform(carla.Transform(carla.Location(x=-68.29, y=151.75, z=170.8), carla.Rotation(pitch=-31.07, yaw= -90.868, roll=1.595))) # plain ground
+#spectator.set_transform(carla.Transform(carla.Location(x=79.95, y=-13.13, z=84.69), carla.Rotation(pitch=-47.2, yaw= -90.86, roll=0.000000))) #slope
 '''
 weather = carla.WeatherParameters(
     cloudiness=10.0,
