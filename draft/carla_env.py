@@ -156,28 +156,50 @@ class CARLA_ENV():
         Parameters
         ----------
         uniquename : TYPE
-            DESCRIPTION.
+            name of the vehicle.
 
         Returns
         -------
-        None.
+        forward speed of the vehicle.
 
         '''
         vehicle = self.vehicle_dict[uniquename]
         velocity = vehicle.get_velocity()
         return (velocity.x ** 2 + velocity.y ** 2 + velocity.z ** 2)**0.5
     
+    def get_transform_2d(self, uniquename):
+        '''
+        
+
+        Parameters
+        ----------
+        uniquename : str
+            name of the vehicle.
+
+        Returns
+        -------
+        location and orientation of the vehicle.
+
+        '''
+        vehicle = self.vehicle_dict[uniquename]
+        transform = vehicle.get_transform()
+        location_2d = [transform.location.x, transform.location.y]
+        yaw = transform.rotation.yaw
+        
+        return (location_2d,yaw)
+        
     
 
-
+'''
 client = carla.Client("localhost",2000)
 client.set_timeout(2.0)
-world = client.load_world('Town06')
+world = client.load_world('Town03')#'Town06' for plain ground
 weather = carla.WeatherParameters(
     cloudiness=10.0,
     precipitation=0.0,
     sun_altitude_angle=90.0)
 world.set_weather(weather)
+'''
 '''
 settings = world.get_settings()
 #settings.synchronous_mode = True
@@ -191,6 +213,7 @@ world.apply_settings(settings)
 #synchrony, delta_seconds = config_world(world)
 blueprint_library = world.get_blueprint_library()
 '''
+'''
 env = CARLA_ENV(world)
 
 try:
@@ -198,3 +221,4 @@ try:
     print(name)
 finally:
     env.destroy_actors()
+'''
