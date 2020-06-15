@@ -27,6 +27,15 @@ import numpy as np
 from collections import deque
 
 
+# color for debug use
+red = carla.Color(255, 0, 0)
+green = carla.Color(0, 255, 0)
+blue = carla.Color(47, 210, 231)
+cyan = carla.Color(0, 255, 255)
+yellow = carla.Color(255, 255, 0)
+orange = carla.Color(255, 162, 0)
+white = carla.Color(255, 255, 255)
+
 def config_world(world, synchrony = True, delta_seconds = 0.02):
         '''
         Effects
@@ -188,8 +197,52 @@ class CARLA_ENV():
         
         return (location_2d,yaw)
         
-    
+    def draw_waypoints(self, trajectory, points):
+        '''
+        Draw the way points and trajectory for the vehicle to follow
 
+        Parameters
+        ----------
+        trajectory : numpy 2d array
+            the interpolated trajectory of a vehicle.
+        points : list of (x,y)
+            waypoints to highlight
+
+        Returns
+        -------
+        None.
+
+        '''
+        for ii in range(len(points) - 1):
+            location = carla.Location(x = points[ii][0], y = points[ii][1], z = 5.0)
+            self.world.debug.draw_point(location, size = 0.1, color = orange, life_time=0.0, persistent_lines=True)
+        
+        location = carla.Location(x = points[-1][0], y = points[-1][1], z = 5.0)
+        self.world.debug.draw_point(location, size = 0.1, color = red, life_time=0.0, persistent_lines=True)
+        
+        for ii in range(1,len(trajectory)):
+            begin = carla.Location(x = trajectory[ii - 1][0], y = trajectory[ii - 1][1], z = 5.0)
+            end = carla.Location(x = trajectory[ii][0], y = trajectory[ii][1], z = 5.0)
+            self.world.debug.draw_line(begin, end, thickness=0.05, color=orange, life_time=0.0, persistent_lines=True)
+    
+    def draw_real_trajectory(self, real_trajectory):
+        '''
+        Draw the real trajectory
+
+        Parameters
+        ----------
+        real_trajectory : a deque of 2 (x,y) tuple
+            stores the current and previous 2d location of the vehicle
+
+        Returns
+        -------
+        None.
+
+        '''
+        begin = carla.Location(x = real_trajectory[0][0], y = real_trajectory[0][1], z = 5.0)
+        end = carla.Location(x = real_trajectory[1][0], y = real_trajectory[1][1], z = 5.0)
+        self.world.debug.draw_arrow(begin, end, thickness=0.2, arrow_size=0.2, color = green, life_time=0.0, persistent_lines=True)
+        
 '''
 client = carla.Client("localhost",2000)
 client.set_timeout(2.0)

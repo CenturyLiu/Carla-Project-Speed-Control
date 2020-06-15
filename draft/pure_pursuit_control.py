@@ -27,6 +27,8 @@ k = 0.1 # coefficient for look ahead
 Lfc = 2.0 # look ahead distance
 L = 2.88 # wheelbase
 
+# enable/disable debug mode to draw trajectory points in carla
+DEBUG = True
 
 def get_PI_controller(delta_seconds):
     '''
@@ -101,7 +103,7 @@ def get_trajectory(way_points):
     distance = np.insert(distance, 0, 0)/distance[-1]
     
     # define interpolation method
-    interpolation_method = 'quadratic'
+    interpolation_method = 'slinear'#'quadratic'
     
     alpha = np.linspace(0,1, 10 * len(distance))
     
@@ -274,6 +276,9 @@ def pure_pursuit_control_wrapper(env,way_points,model_uniquename):
     ref_speeds = deque(maxlen = 2) # the reference / target speed
     curr_speeds = deque(maxlen = 2) # the measured speed of the vehicle
     
+    if DEBUG: 
+        vehicle_pose = deque(maxlen = 2)
+    
     
     # storage for the visualize the reference speed, throttle and measured speed.
     speed = []
@@ -291,6 +296,10 @@ def pure_pursuit_control_wrapper(env,way_points,model_uniquename):
     # interpolate a trajectory based on way_points for the vehicle to follow
     trajectory, ref_speed_list = get_trajectory(way_points)
     
+    if DEBUG:
+        points_debug, _ = zip(*way_points)
+        env.draw_waypoints(trajectory, points_debug) # draw waypoints and expected trajectory
+    
     # main control loop
     while True: #loop for applying control
         env.world.tick()
@@ -300,6 +309,12 @@ def pure_pursuit_control_wrapper(env,way_points,model_uniquename):
         vehicle_pos_2d = env.get_transform_2d(model_uniquename) # the (x,y) location and yaw angle of the vehicle
         speed.append(curr_speed)
         curr_speeds.append(curr_speed)
+        
+        # draw real trajectory if debug is enabled
+        if DEBUG:
+            vehicle_pose.append(vehicle_pos_2d[0])
+            if len(vehicle_pose) == 2:
+                env.draw_real_trajectory(vehicle_pose)
         
         # use pure-pursuit model to get the steer angle (in radius)
         delta, current_ref_speed, index, end_trajectory = pure_pursuit_control(vehicle_pos_2d, curr_speed, trajectory, ref_speed_list, index)
@@ -334,6 +349,14 @@ client = carla.Client("localhost",2000)
 client.set_timeout(10.0)
 world = client.load_world('Town06')
 
+# set the weather
+world = client.get_world()
+weather = carla.WeatherParameters(
+    cloudiness=10.0,
+    precipitation=0.0,
+    sun_altitude_angle=90.0)
+world.set_weather(weather)
+
 # set the spectator position for demo purpose
 spectator = world.get_spectator()
 spectator.set_transform(carla.Transform(carla.Location(x=-68.29, y=151.75, z=170.8), carla.Rotation(pitch=-31.07, yaw= -90.868, roll=1.595))) # plain ground
@@ -352,13 +375,27 @@ time.sleep(5)
 sim_time = 20
 speed_timeline = [(1,25),(7,10),(12,15)]
 
+'''
 way_points = [((-277.08,-15.39),10),
               ((-247.08,-15.39),20),
               ((-147.08,-15.39),10),
               (( 47.08,-15.39),5),
               (( 107.08,-15.39),0)
               ]
-
+'''
+'''
+way_points = [((-277.08,-15.39),20),
+              ((-30.08,-15.39),10),
+              (( -10, 3.6),20),
+              (( -10, 50),0)
+              ]
+'''
+way_points = [((-277.08,-15.39),20),
+              ((-30.08,-15.39),10),
+              ((-12.0,-12.0),10),
+              (( -9, 0.0),20),
+              (( -9, 50),0)
+              ]
 try:
 
     throttles, speed, reference_speed = pure_pursuit_control_wrapper(env,way_points,model_uniquename)
