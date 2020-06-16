@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from collections import deque
 import time
-from scipy.interpolate import interp1d
+from scipy.interpolate import UnivariateSpline
 import math
 
 import control # the python-control package, install first
@@ -101,10 +101,14 @@ def get_trajectory(way_points):
     points, speed = zip(*way_points)
     points = np.array([[pt[0], pt[1]] for pt in points])
     
+    # apply average smoothing of the points
+    points = smooth_trajectory(points)
+    
     # linear length along the line (reference: https://stackoverflow.com/questions/52014197/how-to-interpolate-a-2d-curve-in-python)
     distance = np.cumsum( np.sqrt(np.sum( np.diff(points,axis=0)**2, axis = 1)))
     distance = np.insert(distance, 0, 0)/distance[-1]
     
+    '''
     # define interpolation method
     interpolation_method = 'slinear' #'quadratic'
     
@@ -112,6 +116,13 @@ def get_trajectory(way_points):
     
     interpolator = interp1d(distance, points, kind = interpolation_method, axis = 0)
     trajectory = interpolator(alpha)
+    '''
+    
+    # Build a list of the spline function, one for each dimension:
+    splines = [UnivariateSpline(distance, coords, k=1, s=.2) for coords in points.T]
+    
+    alpha = np.linspace(0,1.02, 2 * len(distance))
+    trajectory = np.vstack( spl(alpha) for spl in splines ).T
     
     
     nearest_index = []
@@ -177,8 +188,33 @@ def get_target_index(location_2d, current_forward_speed, trajectory):
         
     return ind, end_trajectory
     
+
+def smooth_trajectory(trajectory):
+    '''
     
 
+    Parameters
+    ----------
+    trajectory : [(float,float),...,(float,float)]
+        2d trajectory.
+
+    Returns
+    -------
+    smoothed_trajectory : [(float,float),...,(float,float)]
+        the smoother trajectory
+
+    '''
+    smoothed_trajectory = []
+    smoothed_trajectory.append(trajectory[0])
+    
+    num = 3
+    
+    for ii in range(num - 1,len(trajectory)):
+        avg_pt = (trajectory[ii - 2] + trajectory[ii - 1] + trajectory[ii]) / num
+        smoothed_trajectory.append(avg_pt)
+    
+    smoothed_trajectory.append(trajectory[-1])
+    return np.array(smoothed_trajectory)
 
 
 def pure_pursuit_control(vehicle_pos_2d, current_forward_speed, trajectory, ref_speed_list, prev_index):
@@ -287,6 +323,9 @@ def generate_waypoints(env, start, end, constant_speed):
     way_points.append((trajectory[-1], 0.0)) # set the speed at destination to be 0
     
     return way_points
+
+
+
     
 
 def pure_pursuit_control_wrapper(env,start,end,model_uniquename, constant_speed):
