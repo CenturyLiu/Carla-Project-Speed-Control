@@ -181,6 +181,11 @@ class Intersection():
         self.right_vehicle = []
         self.ahead_vehicle = []
         
+        self.start_sim = False # whether the simulation at this intersection should start or not
+        
+    def start_simulation(self):
+        self.start_sim = True
+        
     def _get_local_traffic_lights(self, world_pos,traffic_light_list):
         '''
         
@@ -357,7 +362,7 @@ class Intersection():
             self.env.world.debug.draw_point(self.right_lane_ref.transform.location,size = 0.2, color = blue, life_time=0.0, persistent_lines=True)
             self.env.world.debug.draw_point(self.ahead_lane_ref.transform.location,size = 0.2, color = red, life_time=0.0, persistent_lines=True)
         
-    def add_vehicle(self,gap = 10.0,model_name = "vehicle.tesla.model3",choice = "subject", command = "straight"):    
+    def add_vehicle(self,gap = 10.0,model_name = "vehicle.tesla.model3",choice = "subject", command = "straight", run = False):    
         '''
         
 
@@ -382,7 +387,7 @@ class Intersection():
         vehicle["model"] = model_name
         
         vehicle["command"] = command
-        
+        vehicle["run"] = run
         
         if choice == "subject":
             ref_waypoint = self.subject_lane_ref
@@ -399,8 +404,9 @@ class Intersection():
         
         if len(vehicle_set) != 0:
             ref_waypoint = vehicle_set[-1]["ref_waypoint"]
-            previous_uniquename = vehicle_set[-1]["uniquename"]
-            bb = self.env.get_vehicle_bounding_box(previous_uniquename)
+            #previous_uniquename = vehicle_set[-1]["uniquename"]
+            #bb = self.env.get_vehicle_bounding_box(previous_uniquename)
+            bb = vehicle_set[-1]["bounding_box"]
             
             right_shift_value = right_shift_value #- bb.y / 2
             gap += bb.x
@@ -432,11 +438,18 @@ class Intersection():
         vehicle["location"] = spawn_location
         vehicle["rotation"] = spawn_rotation
         
-        vehicle_set.append(vehicle)
+        
         
         trajectory, ref_speed_list = self._generate_path(choice, command, new_ref_waypoint)
         vehicle["trajectory"] = trajectory
         vehicle["ref_speed_list"] = ref_speed_list
+        
+        # get the bounding box of the new vehicle
+        
+        new_bb = self.env.get_vehicle_bounding_box(uniquename)
+        vehicle["bounding_box"] = new_bb
+        
+        vehicle_set.append(vehicle)
         
     def _get_unit_right_vector(self,yaw):
         # get the right vector
@@ -546,39 +559,50 @@ class Intersection():
         next_waypoint = self.carla_map.get_waypoint(raw_spawn_point)
         return next_waypoint
         
+
         
-client = carla.Client("localhost",2000)
-client.set_timeout(10.0)
-world = client.load_world('Town05')
- 
-# set the weather
-weather = carla.WeatherParameters(
-    cloudiness=10.0,
-    precipitation=0.0,
-    sun_altitude_angle=90.0)
-world.set_weather(weather)
+def main():
+    try:
+        client = carla.Client("localhost",2000)
+        client.set_timeout(10.0)
+        world = client.load_world('Town05')
+         
+        # set the weather
+        weather = carla.WeatherParameters(
+            cloudiness=10.0,
+            precipitation=0.0,
+            sun_altitude_angle=90.0)
+        world.set_weather(weather)
+        
+        # set the spectator position for demo purpose
+        spectator = world.get_spectator()
+        spectator.set_transform(carla.Transform(carla.Location(x=0.0, y=0.0, z=20.0), carla.Rotation(pitch=-31.07, yaw= -90.868, roll=1.595))) # plain ground
+        
+        env = CARLA_ENV(world) 
+        time.sleep(2) # sleep for 2 seconds, wait the initialization to finish
+        
+        world_pos = (25.4,0.0)
+        traffic_light_list = get_traffic_lights(world.get_actors())
+        intersection1 = Intersection(env, world_pos, traffic_light_list)
+        intersection1.add_vehicle()
+        
+        intersection1.add_vehicle(command = "left")
+        intersection1.add_vehicle(command = "right")
+        
+        intersection1.add_vehicle(gap = 5,choice = "left")
+        intersection1.add_vehicle(gap = 5, choice = "left",command = "left")
+        intersection1.add_vehicle(gap = 5,choice = "left",command = "right")
+        intersection1.add_vehicle(choice = "right")
+        intersection1.add_vehicle(choice = "right",command = "left")
+        intersection1.add_vehicle(choice = "right",command = "right")
+        intersection1.add_vehicle(choice = "ahead")
+        intersection1.add_vehicle(choice = "ahead",command = "left")
+        intersection1.add_vehicle(choice = "ahead",command = "right")
+    finally:
+        time.sleep(10)
+        env.destroy_actors()
 
-# set the spectator position for demo purpose
-spectator = world.get_spectator()
-spectator.set_transform(carla.Transform(carla.Location(x=0.0, y=0.0, z=20.0), carla.Rotation(pitch=-31.07, yaw= -90.868, roll=1.595))) # plain ground
-
-env = CARLA_ENV(world) 
-time.sleep(2) # sleep for 2 seconds, wait the initialization to finish
-
-world_pos = (25.4,0.0)
-traffic_light_list = get_traffic_lights(world.get_actors())
-intersection1 = Intersection(env, world_pos, traffic_light_list)
-intersection1.add_vehicle()
-
-intersection1.add_vehicle(command = "left")
-intersection1.add_vehicle(command = "right")
-
-intersection1.add_vehicle(gap = 5,choice = "left")
-intersection1.add_vehicle(gap = 5, choice = "left",command = "left")
-intersection1.add_vehicle(gap = 5,choice = "left",command = "right")
-intersection1.add_vehicle(choice = "right")
-intersection1.add_vehicle(choice = "right",command = "left")
-intersection1.add_vehicle(choice = "right",command = "right")
-intersection1.add_vehicle(choice = "ahead")
-intersection1.add_vehicle(choice = "ahead",command = "left")
-intersection1.add_vehicle(choice = "ahead",command = "right")
+if __name__ == '__main__':
+    main()
+    
+    
