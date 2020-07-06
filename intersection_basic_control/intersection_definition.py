@@ -13,8 +13,11 @@ import math
 import time
 import numpy as np
 from configobj import ConfigObj
+from generate_path_omit_regulation import generate_path
+from scipy.interpolate import UnivariateSpline
 
 DEBUG_INIT = True
+DEBUG_TRAJECTORY = True
 
 # color for debug use
 red = carla.Color(255, 0, 0)
@@ -42,6 +45,103 @@ def get_traffic_lights(actor_list):
         if 'traffic_light' in actor.type_id:
             traffic_light_list.append(actor)
     return traffic_light_list
+
+def smooth_trajectory(trajectory):
+    '''
+    
+
+    Parameters
+    ----------
+    trajectory : np.array([(float,float),...,(float,float)])
+        2d trajectory.
+
+    Returns
+    -------
+    smoothed_trajectory : np.array([(float,float),...,(float,float)])
+        the smoother trajectory
+
+    '''
+    
+    smoothed_trajectory = []
+    smoothed_trajectory.append(trajectory[0])
+    
+    num = 3
+    
+    for ii in range(num - 1,len(trajectory)):
+        avg_pt = (trajectory[ii - 2] + trajectory[ii - 1] + trajectory[ii]) / num
+        smoothed_trajectory.append(avg_pt)
+    
+    smoothed_trajectory.append(trajectory[-1])
+    return np.array(smoothed_trajectory)
+
+def get_trajectory(way_points):
+    '''
+    
+
+    Parameters
+    ----------
+    way_points : list
+        A list of (way_point, reference_speed) tuple, 
+        where way_points is a tuple of floats (x,y), the first point must be the **current point** of the vehicle
+              reference speed is the desired speed for the vehicle after this way point and before the next way point
+        e.g. [((0.0,0.0),10.0),((0.0,10.0),1.0)]
+
+    Returns
+    -------
+    trajectory : numpy 2d array
+        the interpolated trajectory.
+    ref_speed_list : list
+        the speed correspoding to the interpolated trajectory
+
+    '''
+    points, speed = zip(*way_points)
+    points = np.array([[pt[0], pt[1]] for pt in points])
+    
+    # apply average smoothing of the points
+    points = smooth_trajectory(points)
+    
+    # linear length along the line (reference: https://stackoverflow.com/questions/52014197/how-to-interpolate-a-2d-curve-in-python)
+    distance = np.cumsum( np.sqrt(np.sum( np.diff(points,axis=0)**2, axis = 1)))
+    distance = np.insert(distance, 0, 0)/distance[-1]
+    
+    '''
+    # define interpolation method
+    interpolation_method = 'slinear' #'quadratic'
+    
+    alpha = np.linspace(0,1, 2 * len(distance))
+    
+    interpolator = interp1d(distance, points, kind = interpolation_method, axis = 0)
+    trajectory = interpolator(alpha)
+    '''
+    
+    # Build a list of the spline function, one for each dimension:
+    splines = [UnivariateSpline(distance, coords, k=3, s=.2) for coords in points.T]
+    
+    alpha = np.linspace(0,1.02, 2 * len(distance))
+    trajectory = np.vstack( [spl(alpha) for spl in splines] ).T
+    
+    
+    nearest_index = []
+    for pt in points:
+        nearest_distance = np.inf
+        index = 0
+        count = 0
+        for trajectory_pt in trajectory:
+            dist_2 = sum((trajectory_pt - pt)**2)
+            if dist_2 < nearest_distance:
+                nearest_distance = dist_2
+                index = count
+            count += 1
+        nearest_index.append(index)
+        
+    ref_speed_list = np.zeros(len(trajectory))
+    for ii in range(1,len(nearest_index)):
+        ref_speed_list[nearest_index[ii - 1]:nearest_index[ii]] = speed[ii - 1]
+    
+    #plt.plot(trajectory[:,0],trajectory[:,1],'.')
+    #print(ref_speed_list)
+    
+    return trajectory, ref_speed_list
 
 class Intersection():
     def __init__(self, env, world_pos, traffic_light_list, distance = 75.0, yaw = 0.0):
@@ -220,7 +320,7 @@ class Intersection():
                 self._debug_lane_point(pt,blue)
                 
             elif abs(relative_yaw - 180) < max_angle_dev:
-                self.subject_out.append(pt)
+                self.subject_in.append(pt)
                 self._debug_lane_point(pt,yellow)
                 
             elif abs(relative_yaw - 270) < max_angle_dev:
@@ -307,6 +407,7 @@ class Intersection():
         
         # use the original reference point to get the new reference point
         # reference point is in the middle of the lane
+        # function same as self._get_next_waypoint
         forward_vector = ref_waypoint.transform.get_forward_vector()
 
         location = ref_waypoint.transform.location
@@ -333,7 +434,9 @@ class Intersection():
         
         vehicle_set.append(vehicle)
         
-        
+        trajectory, ref_speed_list = self._generate_path(choice, command, new_ref_waypoint)
+        vehicle["trajectory"] = trajectory
+        vehicle["ref_speed_list"] = ref_speed_list
         
     def _get_unit_right_vector(self,yaw):
         # get the right vector
@@ -342,6 +445,106 @@ class Intersection():
         right_vector = [math.cos(rad_yaw),math.sin(rad_yaw)]
         right_vector = right_vector / np.linalg.norm(right_vector)
         return right_vector
+        
+    
+    def _generate_path(self, choice, command, start_waypoint):
+        '''
+        
+
+        Parameters
+        ----------
+        choice : string
+            the lane choice, valid values: "subject","left","right","ahead"
+        command : string
+            the command of navigation. valid command: "straight","left","right"
+
+        Returns
+        -------
+        smoothed_full_trajectory : list of 2d points
+             smoothed and interpolated trajectory
+
+        ref_speed_list : list
+             the speed correspoding to the interpolated trajectory
+        '''
+        color = green
+        
+        if choice == "subject":
+            first_waypoint = self.subject_lane_ref
+            straight_waypoint = self.ahead_in[0] # can also be [1], choosing the left lane
+            left_waypoint = self.left_in[0]
+            right_waypoint = self.right_in[0]
+            
+            
+        elif choice == "left":
+            first_waypoint = self.left_lane_ref
+            straight_waypoint = self.right_in[0] # can also be [1], choosing the left lane
+            left_waypoint = self.ahead_in[0]
+            right_waypoint = self.subject_in[0]
+            
+        elif choice == "ahead":
+            first_waypoint = self.ahead_lane_ref
+            straight_waypoint = self.subject_in[0] # can also be [1], choosing the left lane
+            left_waypoint = self.right_in[0]
+            right_waypoint = self.left_in[0]
+            
+        elif choice == "right":
+            first_waypoint = self.right_lane_ref
+            straight_waypoint = self.left_in[0] # can also be [1], choosing the left lane
+            left_waypoint = self.subject_in[0]
+            right_waypoint = self.ahead_in[0]
+            
+        #self.env.world.debug.draw_point(start_waypoint.transform.location,size = 0.5, color = red, life_time=0.0, persistent_lines=True)
+            
+        if command == "straight":
+            second_waypoint = straight_waypoint
+        elif command == "left":
+            #first_waypoint = self._get_next_waypoint(first_waypoint,3)
+            second_waypoint = left_waypoint
+            color = yellow
+        elif command == "right":
+            second_waypoint = right_waypoint
+            color = blue
+            
+        third_waypoint = self._get_next_waypoint(second_waypoint,20)
+        trajectory1 = generate_path(self.env, start_waypoint, first_waypoint, waypoint_separation = 4)
+        trajectory2 = generate_path(self.env, first_waypoint, second_waypoint,waypoint_separation = 4)
+        trajectory3 = generate_path(self.env, second_waypoint, third_waypoint)
+        full_trajectory = trajectory1 + trajectory2[1:] + trajectory3[1:] # append the full trajectory
+        
+        trajectory = [((pt[0],pt[1]),10.0) for pt in full_trajectory]
+        
+        smoothed_full_trajectory, ref_speed_list = get_trajectory(trajectory) 
+        
+        if DEBUG_TRAJECTORY:
+            for ii in range(1,len(smoothed_full_trajectory)):
+                loc1 = carla.Location(x = smoothed_full_trajectory[ii - 1][0], y = smoothed_full_trajectory[ii - 1][1], z = 0.0)
+                loc2 = carla.Location(x = smoothed_full_trajectory[ii][0], y = smoothed_full_trajectory[ii][1], z = 0.0)
+                self.env.world.debug.draw_arrow(loc1, loc2, thickness = 0.05, arrow_size = 0.1, color = color, life_time=0.0, persistent_lines=True)
+        return smoothed_full_trajectory, ref_speed_list
+    
+    def _get_next_waypoint(self,curr_waypoint,distance = 10):
+        '''
+        
+
+        Parameters
+        ----------
+        curr_waypoint : carla.Waypoint
+            current waypoint.
+        distance : float, optional
+            "distance" between current waypoint and target waypoint . The default is 10.
+
+        Returns
+        -------
+        next_waypoint : carla.Waypoint
+            next waypoint, "distance" away from curr_waypoint, in the direction of the current way point
+        '''
+        forward_vector = curr_waypoint.transform.get_forward_vector()
+
+        location = curr_waypoint.transform.location
+        raw_spawn_point = carla.Location(x = location.x + distance * forward_vector.x  , y = location.y + distance * forward_vector.y , z = 10.0)
+        
+        next_waypoint = self.carla_map.get_waypoint(raw_spawn_point)
+        return next_waypoint
         
         
 client = carla.Client("localhost",2000)
@@ -366,14 +569,16 @@ world_pos = (25.4,0.0)
 traffic_light_list = get_traffic_lights(world.get_actors())
 intersection1 = Intersection(env, world_pos, traffic_light_list)
 intersection1.add_vehicle()
-intersection1.add_vehicle()
-intersection1.add_vehicle()
+
+intersection1.add_vehicle(command = "left")
+intersection1.add_vehicle(command = "right")
+
 intersection1.add_vehicle(gap = 5,choice = "left")
-intersection1.add_vehicle(gap = 5, choice = "left")
-intersection1.add_vehicle(gap = 5,choice = "left")
+intersection1.add_vehicle(gap = 5, choice = "left",command = "left")
+intersection1.add_vehicle(gap = 5,choice = "left",command = "right")
 intersection1.add_vehicle(choice = "right")
-intersection1.add_vehicle(choice = "right")
-intersection1.add_vehicle(choice = "right")
+intersection1.add_vehicle(choice = "right",command = "left")
+intersection1.add_vehicle(choice = "right",command = "right")
 intersection1.add_vehicle(choice = "ahead")
-intersection1.add_vehicle(choice = "ahead")
-intersection1.add_vehicle(choice = "ahead")
+intersection1.add_vehicle(choice = "ahead",command = "left")
+intersection1.add_vehicle(choice = "ahead",command = "right")
