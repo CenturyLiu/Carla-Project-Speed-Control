@@ -427,6 +427,9 @@ def main():
         intersection1.add_vehicle(choice = "ahead",command = "right", obey_traffic_lights = False)
         intersection1.add_vehicle(choice = "ahead",command = "left", obey_traffic_lights = False)
         
+        intersection1._shift_vehicles(-10,index = 1)
+        
+        
         intersection1.start_simulation()
         
         intersection_list.append(intersection1)
