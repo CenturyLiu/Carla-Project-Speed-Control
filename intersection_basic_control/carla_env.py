@@ -115,7 +115,36 @@ class CARLA_ENV():
         vehicle = self.world.spawn_actor(bp,spawn_point)
         self.vehicle_dict[vehicle.type_id + '_' + str(vehicle.id)] = vehicle
         return vehicle.type_id + '_' + str(vehicle.id)
+    
+    def destroy_vehicle(self, uniquename):
+        if uniquename in self.vehicle_dict:
+            self.vehicle_dict[uniquename].destroy() # destroy the vehicle in carla
+            self.vehicle_dict.pop(uniquename) # remove the vehicle from dictionary
+    
+    def get_vehicle_bounding_box(self, uniquename):
+        '''
+        
 
+        Parameters
+        ----------
+        uniquename : string
+            uniquename of a vehicle.
+
+        Returns
+        -------
+        the carla actor corresponding to the uniquename.
+        None type will be sent is uniquename doesn't exist
+        
+
+        '''
+        ret_vehicle_bb = None
+        if uniquename in self.vehicle_dict:
+            ret_vehicle_bb = self.vehicle_dict[uniquename].bounding_box.extent
+            
+            
+        return ret_vehicle_bb
+        
+        
     def destroy_actors(self):
         '''
         Effects
@@ -196,6 +225,29 @@ class CARLA_ENV():
         yaw = transform.rotation.yaw
         
         return (location_2d,yaw)
+    
+    def get_traffic_light_state(self, uniquename):
+        '''
+        
+
+        Parameters
+        ----------
+        uniquename : str
+            name of the vehicle..
+
+        Returns
+        -------
+        The traffic light state corresponding to this vehicle.
+        If no traffic light available, return None
+
+        '''
+        vehicle = self.vehicle_dict[uniquename]
+        state = None
+        if vehicle.is_at_traffic_light():
+            light = vehicle.get_traffic_light()
+            state = light.get_state()
+            
+        return state
         
     def draw_waypoints(self, trajectory, points):
         '''
