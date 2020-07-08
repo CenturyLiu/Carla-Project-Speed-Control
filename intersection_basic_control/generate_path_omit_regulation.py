@@ -45,7 +45,7 @@ white = carla.Color(255, 255, 255)
 
 # enable/disable debug mode to draw the trajectory finding process in carla
 DEBUG = True
-display_trajectory = True
+display_trajectory = False
 
 def waypoint_exists(new_point, waypoint_list):
     for pt in waypoint_list:
@@ -121,7 +121,7 @@ def end_of_search(current_w, destination, waypoint_separation):
     current_location = current_w.transform.location
     destination_location = destination.transform.location
     distance = math.sqrt( (current_location.x - destination_location.x)**2 + (current_location.y - destination_location.y)**2 )
-    if distance <= waypoint_separation / 10:
+    if distance <= waypoint_separation / 2:
         print(distance)
         
         return True
