@@ -25,7 +25,8 @@ import carla
 import matplotlib.pyplot as plt
 import numpy as np
 from collections import deque
-
+from configobj import ConfigObj
+import math
 
 # color for debug use
 red = carla.Color(255, 0, 0)
@@ -80,6 +81,9 @@ class CARLA_ENV():
         #self.synchrony = synchrony
         #self.delta_seconds = delta_seconds
         
+        self.distance_between_vehicles = ConfigObj() # store the distance between vehicles
+        
+        
     def config_env(self, synchrony = False, delta_seconds = 0.02):
 
         
@@ -115,7 +119,57 @@ class CARLA_ENV():
         vehicle = self.world.spawn_actor(bp,spawn_point)
         self.vehicle_dict[vehicle.type_id + '_' + str(vehicle.id)] = vehicle
         return vehicle.type_id + '_' + str(vehicle.id)
+    
+    def move_vehicle_location(self, uniquename, spawn_point):
+        '''
+        
 
+        Parameters
+        ----------
+        uniquename : string
+            uniquename of a vehicle.
+        spawn_point :  carla.Transform()
+            new spawn point of the vehicle
+
+        Returns
+        -------
+        None.
+
+        '''
+        
+        
+        vehicle = self.vehicle_dict[uniquename]
+        vehicle.set_transform(spawn_point)
+    
+    def destroy_vehicle(self, uniquename):
+        if uniquename in self.vehicle_dict:
+            self.vehicle_dict[uniquename].destroy() # destroy the vehicle in carla
+            self.vehicle_dict.pop(uniquename) # remove the vehicle from dictionary
+    
+    def get_vehicle_bounding_box(self, uniquename):
+        '''
+        
+
+        Parameters
+        ----------
+        uniquename : string
+            uniquename of a vehicle.
+
+        Returns
+        -------
+        the carla actor corresponding to the uniquename.
+        None type will be sent is uniquename doesn't exist
+        
+
+        '''
+        ret_vehicle_bb = None
+        if uniquename in self.vehicle_dict:
+            ret_vehicle_bb = self.vehicle_dict[uniquename].bounding_box.extent
+            
+            
+        return ret_vehicle_bb
+        
+        
     def destroy_actors(self):
         '''
         Effects
@@ -176,6 +230,26 @@ class CARLA_ENV():
         velocity = vehicle.get_velocity()
         return (velocity.x ** 2 + velocity.y ** 2 + velocity.z ** 2)**0.5
     
+    def vehicle_available(self, uniquename):
+        '''
+        check whether the vehicle exists
+
+        Parameters
+        ----------
+        uniquename : str
+            name of the vehicle.
+
+        Returns
+        -------
+        exists : bool
+            whether the vehicle exists
+
+        '''
+        if uniquename in self.vehicle_dict:
+            return True
+        else:
+            return False
+    
     def get_transform_2d(self, uniquename):
         '''
         
@@ -195,7 +269,142 @@ class CARLA_ENV():
         location_2d = [transform.location.x, transform.location.y]
         yaw = transform.rotation.yaw
         
+        
+        
         return (location_2d,yaw)
+    
+    def get_transform_3d(self, uniquename):
+        '''
+        
+
+        Parameters
+        ----------
+        uniquename : str
+            name of the vehicle.
+
+        Returns
+        -------
+        3d transform of the vehicle
+
+        '''
+        vehicle = self.vehicle_dict[uniquename]
+        transform = vehicle.get_transform()
+        
+        
+        return transform
+    
+    def update_vehicle_distance(self):
+        '''
+        Update the distance between each 2 vehicles
+        This function should be called each world.tick()
+
+        Returns
+        -------
+        None.
+
+        '''
+        self.distance_between_vehicles.reset() # reset the configuration file each update
+        
+        # get all available vehicles
+        vehicle_uniquenames = []
+        for name in self.vehicle_dict:
+            vehicle_uniquenames.append(name)
+            self.distance_between_vehicles[name] = {} # create empty storage
+            
+        for ii in range(len(vehicle_uniquenames)):
+            for jj in range(ii,len(vehicle_uniquenames)):
+                name_1 = vehicle_uniquenames[ii]
+                name_2 = vehicle_uniquenames[jj]
+                if name_1 == name_2:
+                    self.distance_between_vehicles[name_1][name_2] = 0.0 # distance with itself, 0.0
+                else:
+                    vehicle_1 = self.vehicle_dict[name_1]
+                    vehicle_2 = self.vehicle_dict[name_2]
+                    location_1 = vehicle_1.get_transform().location
+                    location_2 = vehicle_2.get_transform().location
+                    distance = math.sqrt((location_1.x - location_2.x)**2 + (location_1.y - location_2.y)**2)
+                    self.distance_between_vehicles[name_1][name_2] = distance
+                    self.distance_between_vehicles[name_2][name_1] = distance
+                    
+    def check_vehicle_in_front(self, uniquename, safety_distance):
+        '''
+        
+
+        Parameters
+        ----------
+        uniquename : str
+            name of the vehicle.
+            
+        safety_distance: float
+            allowed closest distance between two vehicles
+
+        Returns
+        -------
+        has_vehicle_in_front : bool
+            whether there exists a vehicle within safety distance
+        distance: float
+            distance between this vehicle and the vehicle in the front
+
+        '''
+        # get the distance between this vehicle and other vehicles
+        distance_with_other_vehicle = self.distance_between_vehicles[uniquename]
+        
+        # get the bounding box of this vehicle
+        vehicle_bb = self.vehicle_dict[uniquename].bounding_box.extent
+        safety_distance += vehicle_bb.x / 2 # add the half length of the vehicle
+        
+        has_vehicle_in_front = False
+        distance = None
+        
+        vehicle_1 = self.vehicle_dict[uniquename]
+        location_1 = vehicle_1.get_transform().location
+        forward_vector = vehicle_1.get_transform().get_forward_vector()
+        
+        for name in distance_with_other_vehicle:
+            if name != uniquename and distance_with_other_vehicle[name] < safety_distance and name in self.vehicle_dict: # a possible vehicle
+                location_2 = self.vehicle_dict[name].get_transform().location
+                vec1_2 = np.array([location_2.x - location_1.x, location_2.y - location_1.y])
+                forward_vector_2d = np.array([forward_vector.x, forward_vector.y])
+                
+                norm_vec1_2 = vec1_2 / np.linalg.norm(vec1_2)
+                norm_forward_vector_2d = forward_vector_2d / np.linalg.norm(forward_vector_2d)
+                dot_product = np.dot(norm_vec1_2,norm_forward_vector_2d)
+                angle = np.arccos(dot_product)
+                
+                
+                
+                if angle < np.arctan(vehicle_bb.y /  vehicle_bb.x):#np.arcsin((vehicle_bb.y  + 1) / distance_with_other_vehicle[name]):#np.arctan(vehicle_bb.y / vehicle_bb.x): 
+                    has_vehicle_in_front = True
+                    distance = np.dot(vec1_2,forward_vector_2d)
+                    break
+            
+        return has_vehicle_in_front, distance
+        
+        
+
+    
+    def get_traffic_light_state(self, uniquename):
+        '''
+        
+
+        Parameters
+        ----------
+        uniquename : str
+            name of the vehicle..
+
+        Returns
+        -------
+        The traffic light state corresponding to this vehicle.
+        If no traffic light available, return None
+
+        '''
+        vehicle = self.vehicle_dict[uniquename]
+        state = None
+        if vehicle.is_at_traffic_light():
+            light = vehicle.get_traffic_light()
+            state = light.get_state()
+            
+        return state
         
     def draw_waypoints(self, trajectory, points):
         '''
@@ -223,7 +432,7 @@ class CARLA_ENV():
         for ii in range(1,len(trajectory)):
             begin = carla.Location(x = trajectory[ii - 1][0], y = trajectory[ii - 1][1], z = 5.0)
             end = carla.Location(x = trajectory[ii][0], y = trajectory[ii][1], z = 5.0)
-            self.world.debug.draw_line(begin, end, thickness=0.05, color=orange, life_time=0.0, persistent_lines=True)
+            self.world.debug.draw_line(begin, end, thickness=0.8, color=orange, life_time=0.0, persistent_lines=True)
     
     def draw_real_trajectory(self, real_trajectory):
         '''
@@ -241,7 +450,7 @@ class CARLA_ENV():
         '''
         begin = carla.Location(x = real_trajectory[0][0], y = real_trajectory[0][1], z = 5.0)
         end = carla.Location(x = real_trajectory[1][0], y = real_trajectory[1][1], z = 5.0)
-        self.world.debug.draw_arrow(begin, end, thickness=0.2, arrow_size=0.2, color = green, life_time=0.0, persistent_lines=True)
+        #self.world.debug.draw_arrow(begin, end, thickness=1.0, arrow_size=1.0, color = green, life_time=0.0, persistent_lines=True)
         
 '''
 client = carla.Client("localhost",2000)
