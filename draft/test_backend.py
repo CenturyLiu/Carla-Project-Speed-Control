@@ -35,18 +35,31 @@ def main():
         env = CARLA_ENV(world) 
         time.sleep(2) # sleep for 2 seconds, wait the initialization to finish
 
+
+   
+        # get traffic light list
         traffic_light_list = get_traffic_lights(world.get_actors())
 
+
+        # get intersection list
         intersection_list = create_intersections(env, 4, traffic_light_list)
+        
+        # edit intersection
+        # these should be done with the help of the front end gui
         init_intersection = intersection_list[0]
         normal_intersections = intersection_list[1:]
-        init_intersection.add_ego_vehicle(safety_distance = 15.0, stop_choice = "abrupt")
+        init_intersection.add_ego_vehicle(safety_distance = 15.0, stop_choice = "abrupt", vehicle_color = '255,255,255')
         init_intersection.add_follow_vehicle(follow_distance = 20.0, stop_choice = "penetrate", penetrate_distance = 2.0)
         init_intersection.add_lead_vehicle(lead_distance = 20.0, stop_choice = "abrupt")
-        init_intersection.add_vehicle(choice = "left", stop_choice = "abrupt")
+        init_intersection.add_vehicle(choice = "left", stop_choice = "abrupt", vehicle_color = '255,255,255')
         init_intersection.add_vehicle(choice = "right",command="left")
-        init_intersection.add_vehicle(choice = "ahead",command="left")
-        init_intersection.add_vehicle(choice = "ahead",command = "right")
+        
+        # test edit settings
+        name1 = init_intersection.add_vehicle(choice = "ahead",command="left")
+        name2 = init_intersection.add_vehicle(choice = "ahead",command = "right")
+        
+        init_intersection.edit_vehicle_settings(name1, choice = "ahead", vehicle_color = '128,128,128')
+        init_intersection.edit_vehicle_settings(name2, choice = "ahead", gap = 15.0, vehicle_color = '128,128,128')
         init_intersection.edit_traffic_light("subject")
         init_intersection.edit_traffic_light("left",red_start = 40.0,red_end = 60.0,yellow_start=30.0,yellow_end=40.0,green_start=0.0,green_end = 30.0)
         init_intersection.edit_traffic_light("right",red_start = 0.0,red_end = 10.0,yellow_start=10.0,yellow_end=20.0,green_start=20.0,green_end = 40.0)
