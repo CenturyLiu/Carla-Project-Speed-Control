@@ -96,6 +96,21 @@ class FreewayEnv(object):
     def get_section_list(self):
         return self.section_list
     
+    def get_vehicle_bounding_box(self,uniquename):
+        '''
+        get the bounding box of the vehicle by uniquename
+        Parameters
+        ----------
+        uniquename : string
+            the uniquename of the vehicle.
+        Returns
+        -------
+        new_bb : carla.Vector3D
+            the bounding box of the vehicle, new_bb.x is the length, new_bb.y is the width, new_bb.z is the height
+        '''
+        new_bb = self.env.get_vehicle_bounding_box(uniquename)
+        return new_bb
+    
     def add_ego_vehicle(self, model_name = "vehicle.tesla.model3", safety_distance = 15.0, vehicle_color = None):
         # wrapper for add_ego_vehicle function of the init_section
         
@@ -299,15 +314,21 @@ class FreewayEnv(object):
         # edit the section settings
         section.edit_full_path_vehicle_local_setting(vehicle_type, choice, vehicle_index, command = command, command_start_time = command_start_time)
     
-    def SectionBackend(self):
+    def SectionBackend(self, spectator_mode = None):
         '''
         back end function for the freeway
+
+        Parameters
+        ----------
+        spectator_mode : string, optional
+            the spectator mode, valid value is "first_person". The default is None.
 
         Returns
         -------
         None.
 
         '''
+        
         init_section = self.section_list[0]
         ego_vehicle =  VehicleControlFreeway(self.env, init_section.ego_vehicle, self.env.delta_seconds)
         ego_uniquename = init_section.ego_vehicle["uniquename"]
@@ -346,7 +367,7 @@ class FreewayEnv(object):
             
             # change spectator view
             
-            if self.env.vehicle_available(ego_uniquename):
+            if self.env.vehicle_available(ego_uniquename) and spectator_mode == "first_person" :
                  spectator_vehicle_transform = self.env.get_transform_3d(ego_uniquename)
                  spectator_transform = get_ego_spectator(spectator_vehicle_transform,distance = -40)
                  self.spectator.set_transform(spectator_transform)
@@ -696,6 +717,9 @@ def main():
         name4 = freewayenv.add_full_path_vehicle(gap = 20.0, vehicle_type = "lead", choice = "subject")
         name5 = freewayenv.add_full_path_vehicle(vehicle_type = "follow", choice = "subject")
         
+        # get bounding box
+        bb = freewayenv.get_vehicle_bounding_box(name1)
+        print("bb.x = %f, bb.y = %f, bb.z = %f" % (bb.x,bb.y,bb.z))
         
         
         # adjust the lead and follow vehicle settings in the third section
@@ -733,7 +757,7 @@ def main():
         #freewayenv.edit_full_path_vehicle_init_setting(name3, gap = 25.0, vehicle_type = "follow", choice = "left", vehicle_color = '255,255,255')
         
         
-        freewayenv.SectionBackend()
+        freewayenv.SectionBackend(spectator_mode = "first_person")
     finally:
         time.sleep(10)
         env.destroy_actors()
